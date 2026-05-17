@@ -1,12 +1,10 @@
-// PAC - PRESENTATION: Página de Reportes (soporte_tecnico) — Diseño nuevo
+// PAC - PRESENTATION: Página de Reportes Admin — lee de reportes_trabajador
 import { useState, useEffect } from 'react';
-import { soporteService }   from '../../abstraction/soporte.service';
-import { equiposService }   from '../../abstraction/equipos.service';
 import { reportesService }  from '../../abstraction/reportes.service';
+import { equiposService }   from '../../abstraction/equipos.service';
 import StatusPanel           from '../components/StatusPanel';
-import { useAuth }           from '../../control/AuthContext';
 
-const ESTADOS    = ['Pendiente', 'En proceso', 'Terminado'];
+const ESTADOS     = ['Pendiente', 'En proceso', 'Terminado'];
 const PRIORIDADES = ['Baja', 'Media', 'Alta'];
 
 function formatFecha(f) {
@@ -17,23 +15,7 @@ function formatFecha(f) {
   });
 }
 
-/* ======= Ícono reloj ======= */
-const IcoClock = () => (
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10"/>
-    <polyline points="12 6 12 12 16 14"/>
-  </svg>
-);
-
-/* ======= Ícono check ======= */
-const IcoCheck = () => (
-  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-    <polyline points="22 4 12 14.01 9 11.01"/>
-  </svg>
-);
-
-/* ======= Modal editar ======= */
+/* ── Modal editar ── */
 function Modal({ datos, onChange, onSave, onClose, equipos, loading }) {
   return (
     <div className="modal-overlay">
@@ -45,7 +27,7 @@ function Modal({ datos, onChange, onSave, onClose, equipos, loading }) {
         <div className="modal-body">
           <div className="form-group">
             <label className="form-label">Equipo</label>
-            <select className="form-control" value={datos.id_equipo}
+            <select className="form-control" value={datos.id_equipo || ''}
               onChange={e => onChange({ ...datos, id_equipo: e.target.value })}>
               <option value="">Sin equipo</option>
               {equipos.map(eq => <option key={eq.id_equipo} value={eq.id_equipo}>{eq.nombre}</option>)}
@@ -53,13 +35,13 @@ function Modal({ datos, onChange, onSave, onClose, equipos, loading }) {
           </div>
           <div className="form-group">
             <label className="form-label">Descripción / Problema</label>
-            <textarea className="form-control" rows={3} value={datos.descripcion}
+            <textarea className="form-control" rows={3} value={datos.descripcion || ''}
               onChange={e => onChange({ ...datos, descripcion: e.target.value })} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div className="form-group">
               <label className="form-label">Estado</label>
-              <select className="form-control" value={datos.estado}
+              <select className="form-control" value={datos.estado || 'Pendiente'}
                 onChange={e => onChange({ ...datos, estado: e.target.value })}>
                 {ESTADOS.map(s => <option key={s}>{s}</option>)}
               </select>
@@ -84,36 +66,45 @@ function Modal({ datos, onChange, onSave, onClose, equipos, loading }) {
   );
 }
 
-export default function Reportes() {
-  const { usuario } = useAuth();
+const IcoClock = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
+const IcoCheck = () => (
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+  </svg>
+);
 
-  const [reportes, setReportes]   = useState([]);
-  const [equipos, setEquipos]     = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState('');
+export default function Reportes() {
+  const [reportes, setReportes]     = useState([]);
+  const [equipos, setEquipos]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState('');
   const [filtroArea, setFiltroArea] = useState('');
-  const [modal, setModal]         = useState(false);
-  const [selected, setSelected]   = useState(null);
-  const [form, setForm]           = useState({ id_equipo: '', descripcion: '', estado: 'Pendiente', prioridad: 'Baja' });
-  const [saving, setSaving]       = useState(false);
-  const [rpStats, setRpStats]     = useState({ pendiente: [], enProceso: [], terminado: [] });
+  const [modal, setModal]           = useState(false);
+  const [selected, setSelected]     = useState(null);
+  const [form, setForm]             = useState({ id_equipo: '', descripcion: '', estado: 'Pendiente', prioridad: 'Baja' });
+  const [saving, setSaving]         = useState(false);
+  const [rpStats, setRpStats]       = useState({ pendiente: [], enProceso: [], terminado: [] });
 
   const load = async () => {
     setLoading(true);
     try {
-      const [rRes, eRes, statsRes] = await Promise.allSettled([
-        soporteService.getAll(),
+      const [rRes, eRes, stRes] = await Promise.allSettled([
+        reportesService.getAll(),
         equiposService.getAll(),
         reportesService.getStats(),
       ]);
-      if (rRes.status === 'fulfilled') setReportes(rRes.value.data);
-      if (eRes.status === 'fulfilled') setEquipos(eRes.value.data);
-      if (statsRes.status === 'fulfilled') {
-        const pe = statsRes.value.data?.porEstado || [];
+      if (rRes.status === 'fulfilled') setReportes(rRes.value.data || []);
+      if (eRes.status === 'fulfilled') setEquipos(eRes.value.data || []);
+      if (stRes.status === 'fulfilled') {
+        const pe = stRes.value.data?.porEstado || [];
         setRpStats({
-          pendiente: pe.filter(e => e.estado === 'Pendiente').map(e => `${e.total} reportes pendientes`),
+          pendiente: pe.filter(e => e.estado === 'Pendiente').map(e => `${e.total} reporte${e.total>1?'s':''} pendiente${e.total>1?'s':''}`),
           enProceso: pe.filter(e => e.estado === 'En proceso').map(e => `${e.total} en proceso`),
-          terminado: pe.filter(e => e.estado === 'Terminado').map(e => `${e.total} terminados`),
+          terminado: pe.filter(e => e.estado === 'Terminado').map(e => `${e.total} terminado${e.total>1?'s':''}`),
         });
       }
     } catch { setReportes([]); }
@@ -122,7 +113,7 @@ export default function Reportes() {
 
   useEffect(() => { load(); }, []);
 
-  /* Conteos para stat cards */
+  /* Conteos */
   const cnt = {
     pendiente: reportes.filter(r => r.estado === 'Pendiente').length,
     proceso:   reportes.filter(r => r.estado === 'En proceso').length,
@@ -130,26 +121,31 @@ export default function Reportes() {
   };
 
   /* Filtrado */
-  const areas = [...new Set(equipos.map(e => e.tipo).filter(Boolean))];
+  const areas = [...new Set(reportes.map(r => r.area_usuario).filter(Boolean))];
   const filtrados = reportes.filter(r => {
     const matchSearch = search.trim() === '' ||
       r.descripcion?.toLowerCase().includes(search.toLowerCase()) ||
       r.nombre_usuario?.toLowerCase().includes(search.toLowerCase()) ||
       r.nombre_equipo?.toLowerCase().includes(search.toLowerCase());
-    const matchArea = filtroArea === '' || r.nombre_equipo?.toLowerCase().includes(filtroArea.toLowerCase());
+    const matchArea = filtroArea === '' || r.area_usuario === filtroArea;
     return matchSearch && matchArea;
   });
 
   const abrirEditar = (r) => {
     setSelected(r);
-    setForm({ id_equipo: r.id_equipo, descripcion: r.descripcion, estado: r.estado, prioridad: r.prioridad || 'Baja' });
+    setForm({
+      id_equipo:   r.id_equipo || '',
+      descripcion: r.descripcion,
+      estado:      r.estado,
+      prioridad:   r.prioridad || 'Baja',
+    });
     setModal(true);
   };
 
   const guardar = async () => {
     setSaving(true);
     try {
-      await soporteService.update(selected.id_reporte, form);
+      await reportesService.update(selected.id_reporte_trabajador, form);
       setModal(false); load();
     } catch (err) { alert(err.response?.data?.error || 'Error'); }
     finally { setSaving(false); }
@@ -157,7 +153,7 @@ export default function Reportes() {
 
   const eliminar = async (id) => {
     if (!confirm('¿Eliminar este reporte?')) return;
-    try { await soporteService.delete(id); load(); }
+    try { await reportesService.delete(id); load(); }
     catch (err) { alert(err.response?.data?.error || 'Error'); }
   };
 
@@ -165,7 +161,6 @@ export default function Reportes() {
     const m = { 'Pendiente': 'chip pendiente', 'En proceso': 'chip en-proceso', 'Terminado': 'chip terminado' };
     return m[e] || 'chip';
   };
-
   const chipPrioridad = (p) => {
     const m = { 'Baja': 'chip baja', 'Media': 'chip media', 'Alta': 'chip alta' };
     return m[p] || 'chip baja';
@@ -176,27 +171,16 @@ export default function Reportes() {
       <div className="page-main">
 
         {/* ── Header ── */}
-        <div className="page-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <h1>Reportes de Soporte Técnico</h1>
-          </div>
+        <div style={{ marginBottom: 20 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 800 }}>Reportes de Soporte Técnico</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Reportes levantados por los trabajadores</p>
         </div>
 
         {/* ── Stat Cards ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
 
-          {/* Pendientes — card oscuro */}
-          <div style={{
-            background: 'var(--sidebar-bg)', borderRadius: 16, padding: '20px 24px',
-            display: 'flex', alignItems: 'center', gap: 18,
-            boxShadow: '0 4px 16px rgba(26,61,43,0.25)',
-          }}>
-            <div style={{
-              width: 52, height: 52, borderRadius: 14,
-              background: 'rgba(255,255,255,0.12)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', flexShrink: 0,
-            }}>
+          <div style={{ background: 'var(--sidebar-bg)', borderRadius: 16, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 18, boxShadow: '0 4px 16px rgba(26,61,43,0.25)' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>
               <IcoClock />
             </div>
             <div>
@@ -206,19 +190,8 @@ export default function Reportes() {
             </div>
           </div>
 
-          {/* En proceso — card claro */}
-          <div style={{
-            background: '#fff', border: '1px solid var(--border-color)',
-            borderRadius: 16, padding: '20px 24px',
-            display: 'flex', alignItems: 'center', gap: 18,
-            boxShadow: 'var(--shadow-sm)',
-          }}>
-            <div style={{
-              width: 52, height: 52, borderRadius: 14,
-              background: '#f1f5f9',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#64748b', flexShrink: 0,
-            }}>
+          <div style={{ background: '#fff', border: '1px solid var(--border-color)', borderRadius: 16, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 18, boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
               <IcoClock />
             </div>
             <div>
@@ -228,19 +201,8 @@ export default function Reportes() {
             </div>
           </div>
 
-          {/* Terminados — card claro */}
-          <div style={{
-            background: '#fff', border: '1px solid var(--border-color)',
-            borderRadius: 16, padding: '20px 24px',
-            display: 'flex', alignItems: 'center', gap: 18,
-            boxShadow: 'var(--shadow-sm)',
-          }}>
-            <div style={{
-              width: 52, height: 52, borderRadius: 14,
-              background: '#f0fdf4',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#16a34a', flexShrink: 0,
-            }}>
+          <div style={{ background: '#fff', border: '1px solid var(--border-color)', borderRadius: 16, padding: '20px 24px', display: 'flex', alignItems: 'center', gap: 18, boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 14, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', flexShrink: 0 }}>
               <IcoCheck />
             </div>
             <div>
@@ -251,45 +213,25 @@ export default function Reportes() {
           </div>
         </div>
 
-        {/* ── Tabla con filtros ── */}
+        {/* ── Tabla ── */}
         <div className="table-card">
-          {/* Barra de búsqueda y filtro */}
           <div style={{ display: 'flex', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border-color)' }}>
-            {/* Búsqueda */}
             <div style={{ position: 'relative', flex: 1, maxWidth: 340 }}>
               <svg style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
                 width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
               </svg>
-              <input
-                id="reportes-search"
-                type="text"
-                placeholder="Buscar..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{
-                  width: '100%', padding: '8px 12px 8px 34px',
-                  border: '1px solid var(--border-color)', borderRadius: 8,
-                  fontSize: 13, outline: 'none', fontFamily: 'Inter, sans-serif',
-                  background: 'var(--bg-main)',
-                }}
-              />
+              <input id="reportes-search" type="text" placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px 8px 34px', border: '1px solid var(--border-color)', borderRadius: 8, fontSize: 13, outline: 'none', fontFamily: 'Inter, sans-serif', background: 'var(--bg-main)' }} />
             </div>
-
-            {/* Filtro área */}
-            <select
-              id="reportes-filtro-area"
-              className="form-control"
-              style={{ width: 'auto', padding: '8px 14px', fontSize: 13, minWidth: 140 }}
-              value={filtroArea}
-              onChange={e => setFiltroArea(e.target.value)}
-            >
-              <option value="">Area: Todos</option>
+            <select id="reportes-filtro-area" className="form-control"
+              style={{ width: 'auto', padding: '8px 14px', fontSize: 13, minWidth: 160 }}
+              value={filtroArea} onChange={e => setFiltroArea(e.target.value)}>
+              <option value="">Área: Todos</option>
               {areas.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
 
-          {/* Tabla */}
           {loading ? (
             <div className="loading-center"><div className="spinner"></div> Cargando reportes...</div>
           ) : filtrados.length === 0 ? (
@@ -302,34 +244,35 @@ export default function Reportes() {
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>Trabajador</th>
                   <th>Equipo</th>
                   <th>Problema</th>
                   <th>Estado</th>
                   <th>Prioridad</th>
-                  <th>Area</th>
+                  <th>Área</th>
                   <th>Fecha</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {filtrados.map(r => (
-                  <tr key={r.id_reporte}>
-                    <td style={{ color: '#9ca3af', fontWeight: 500 }}>#{r.id_reporte}</td>
-                    <td style={{ fontWeight: 500 }}>{r.nombre_equipo || '—'}</td>
+                  <tr key={r.id_reporte_trabajador}>
+                    <td style={{ color: '#9ca3af', fontWeight: 500 }}>#{r.id_reporte_trabajador}</td>
+                    <td style={{ fontWeight: 500 }}>{r.nombre_usuario || '—'}</td>
+                    <td>{r.nombre_equipo || '—'}</td>
                     <td>
-                      <div style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={r.descripcion}>
+                      <div style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.descripcion}>
                         {r.descripcion || '—'}
                       </div>
                     </td>
                     <td><span className={chipEstado(r.estado)}>{r.estado}</span></td>
-                    <td><span className={chipPrioridad(r.prioridad)}>{r.prioridad || 'Baja'}</span></td>
-                    <td style={{ color: '#6b7280', fontSize: 12 }}>{r.nombre_usuario || '—'}</td>
+                    <td><span className={chipPrioridad(r.prioridad || 'Baja')}>{r.prioridad || 'Baja'}</span></td>
+                    <td style={{ color: '#6b7280', fontSize: 12 }}>{r.area_usuario || '—'}</td>
                     <td style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{formatFecha(r.fecha)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn btn-secondary btn-icon" title="Editar" onClick={() => abrirEditar(r)}>✏️</button>
-                        <button className="btn btn-danger btn-icon" title="Eliminar" onClick={() => eliminar(r.id_reporte)}>🗑️</button>
+                        <button className="btn btn-danger btn-icon" title="Eliminar" onClick={() => eliminar(r.id_reporte_trabajador)}>🗑️</button>
                       </div>
                     </td>
                   </tr>
@@ -340,23 +283,15 @@ export default function Reportes() {
         </div>
       </div>
 
-      {/* ── Panel lateral ── */}
+      {/* Panel lateral */}
       <aside className="page-side">
         <StatusPanel title="Pendientes" items={rpStats.pendiente} color="pendiente" />
         <StatusPanel title="En proceso" items={rpStats.enProceso} color="en-proceso" />
         <StatusPanel title="Terminado"  items={rpStats.terminado} color="terminado" />
       </aside>
 
-      {/* ── Modal editar ── */}
       {modal && (
-        <Modal
-          datos={form}
-          onChange={setForm}
-          onSave={guardar}
-          onClose={() => setModal(false)}
-          equipos={equipos}
-          loading={saving}
-        />
+        <Modal datos={form} onChange={setForm} onSave={guardar} onClose={() => setModal(false)} equipos={equipos} loading={saving} />
       )}
     </div>
   );
