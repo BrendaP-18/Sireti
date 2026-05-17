@@ -29,42 +29,65 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchAll = async () => {
       try {
-        const [eqRes, stRes, evRes, rpRes, rpStats] = await Promise.allSettled([
-          equiposService.getAll(),
-          soporteService.getRecientes(5),
-          calendarioService.getProximos(5),
-          soporteService.getStats(),
-          reportesService.getStats(),
+        const [eqRes, evRes, rpStatsRes, reportesAllRes] = await Promise.allSettled([
+          equiposService.getAll(),           // equipos totales
+          calendarioService.getProximos(5),  // eventos próximos
+          reportesService.getStats(),        // stats reportes_trabajador → { total, porEstado }
+          reportesService.getAll(),          // todos los reportes (recientes + terminados)
         ]);
 
-        const eqData  = eqRes.status  === 'fulfilled' ? eqRes.value.data  : [];
-        const stData  = stRes.status  === 'fulfilled' ? stRes.value.data  : [];
-        const evData  = evRes.status  === 'fulfilled' ? evRes.value.data  : [];
-        const rpData  = rpRes.status  === 'fulfilled' ? rpRes.value.data  : { total: 0 };
-        const rpSData = rpStats.status === 'fulfilled' ? rpStats.value.data : { porEstado: [] };
+        const eqData       = eqRes.status        === 'fulfilled' ? eqRes.value.data        : [];
+        const evData       = evRes.status        === 'fulfilled' ? evRes.value.data        : [];
+        const rpStats      = rpStatsRes.status   === 'fulfilled' ? rpStatsRes.value.data   : { total: 0, porEstado: [] };
+        const reportesAll  = reportesAllRes.status === 'fulfilled' ? reportesAllRes.value.data : [];
 
-        // Tickets pendientes en soporte_tecnico
-        const pendientes = rpData?.porEstado?.find(e => e.estado === 'Pendiente')?.total || 0;
+        // Recientes: los 5 primeros (ya vienen ordenados DESC por fecha del backend)
+        const recientes    = Array.isArray(reportesAll) ? reportesAll.slice(0, 5) : [];
+        // Tickets terminados
+        const terminados   = Array.isArray(reportesAll)
+          ? reportesAll.filter(r => (r.estado || '').toLowerCase() === 'terminado')
+          : [];
+
+        console.log('[Dashboard] reportes/stats:', rpStats);
+        console.log('[Dashboard] reportes total:', reportesAll?.length, '| recientes:', recientes.length, '| terminados:', terminados.length);
+        console.log('[Dashboard] calendario/proximos:', evData);
+
+        // Total de reportes_trabajador (card Reportes)
+        const totalReportes = parseInt(rpStats?.total ?? 0, 10);
+
+        // Total de tickets terminados (card Tickets)
+        const totalTickets = terminados.length;
+
+        // Eventos próximos
+        const totalEventos = Array.isArray(evData) ? evData.length : 0;
 
         setStats({
-          equipos:  Array.isArray(eqData) ? eqData.length : 0,
-          soporte:  rpData?.total || 0,
-          tickets:  parseInt(pendientes),
-          eventos:  Array.isArray(evData) ? evData.length : 0,
+          equipos: Array.isArray(eqData) ? eqData.length : 0,
+          soporte: totalReportes,
+          tickets: totalTickets,
+          eventos: totalEventos,
         });
 
-        setTicketsRecientes(Array.isArray(stData) ? stData : []);
+        setTicketsRecientes(recientes);
         setEventosProximos(Array.isArray(evData) ? evData : []);
 
-        // Panel lateral de reportes_trabajador
-        const pe = rpSData?.porEstado || [];
+        // Panel lateral de reportes_trabajador — comparación case-insensitive
+        const pe = Array.isArray(rpStats?.porEstado) ? rpStats.porEstado : [];
         setReporteStats({
-          pendiente: pe.filter(e => e.estado === 'Pendiente').map(e => `${e.total} reportes pendientes`),
-          enProceso: pe.filter(e => e.estado === 'En proceso').map(e => `${e.total} en proceso`),
-          terminado: pe.filter(e => e.estado === 'Terminado').map(e => `${e.total} terminados`),
+          pendiente: pe
+            .filter(e => (e.estado || '').toLowerCase() === 'pendiente')
+            .map(e => `${e.total} reportes pendientes`),
+          enProceso: pe
+            .filter(e => (e.estado || '').toLowerCase() === 'en proceso')
+            .map(e => `${e.total} en proceso`),
+          terminado: pe
+            .filter(e => (e.estado || '').toLowerCase() === 'terminado')
+            .map(e => `${e.total} terminados`),
         });
+
+        console.log('[Dashboard] Stats finales:', { equipos: eqData?.length, reportes: totalReportes, tickets: totalTickets, eventos: totalEventos });
       } catch (err) {
-        console.error(err);
+        console.error('[Dashboard] Error:', err);
       } finally {
         setLoading(false);
       }
@@ -96,8 +119,8 @@ export default function Dashboard() {
         {/* Stats */}
         <div className="stats-grid">
           <StatCard label="Equipos"  value={stats.equipos} sub="Total registrados"  icon="🖥️" type="equipos" />
-          <StatCard label="Reportes" value={stats.soporte} sub="Soporte técnico"    icon="📋" type="reportes" />
-          <StatCard label="Tickets"  value={stats.tickets} sub="Pendientes"         icon="⚠️" type="tickets" />
+          <StatCard label="Reportes" value={stats.soporte} sub="Total reportes"     icon="📋" type="reportes" />
+          <StatCard label="Tickets"  value={stats.tickets} sub="Terminados"         icon="⚠️" type="tickets" />
           <StatCard label="Eventos"  value={stats.eventos} sub="Próximos"           icon="📅" type="eventos" />
         </div>
 
@@ -122,7 +145,7 @@ export default function Dashboard() {
               </div>
             ) : (
               ticketsRecientes.map(t => (
-                <div key={t.id_reporte} className="section-item">
+                <div key={t.id_reporte_trabajador ?? t.id_reporte} className="section-item">
                   <div className="section-item-info">
                     <div className="section-item-title">{t.descripcion}</div>
                     <div className="section-item-meta">{t.nombre_usuario} – {formatFecha(t.fecha || new Date())}</div>
