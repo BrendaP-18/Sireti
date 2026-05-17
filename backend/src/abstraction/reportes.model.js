@@ -50,12 +50,22 @@ const ReportesModel = {
   },
 
   create: async ({ id_usuario, id_equipo, descripcion, estado, prioridad }) => {
-    const result = await pool.query(
-      `INSERT INTO reportes_trabajador (id_usuario, id_equipo, descripcion, fecha, estado, prioridad)
-       VALUES ($1, $2, $3, NOW(), $4, $5) RETURNING *`,
-      [id_usuario, id_equipo || null, descripcion, estado || 'Pendiente', prioridad || 'Baja']
-    );
-    return result.rows[0];
+    try {
+      const result = await pool.query(
+        `INSERT INTO reportes_trabajador (id_usuario, id_equipo, descripcion, fecha, estado, prioridad)
+         VALUES ($1, $2, $3, NOW(), $4, $5) RETURNING *`,
+        [id_usuario, id_equipo || null, descripcion, estado || 'Pendiente', prioridad || 'Baja']
+      );
+      return result.rows[0];
+    } catch (e) {
+      // Fallback: insertar sin prioridad si la columna aún no existe en la BD
+      const result = await pool.query(
+        `INSERT INTO reportes_trabajador (id_usuario, id_equipo, descripcion, fecha, estado)
+         VALUES ($1, $2, $3, NOW(), $4) RETURNING *`,
+        [id_usuario, id_equipo || null, descripcion, estado || 'Pendiente']
+      );
+      return result.rows[0];
+    }
   },
 
   update: async (id, { descripcion, estado, prioridad, id_equipo }) => {
